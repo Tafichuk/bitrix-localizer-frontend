@@ -27,6 +27,8 @@ export default function App() {
   const [form, setForm] = useState({
     articleUrl: '',
     portalUrl: '',
+    login: '',
+    password: '',
     sessionCookies: '',
     language: 'en',
   });
@@ -36,6 +38,7 @@ export default function App() {
   const [downloadUrl, setDownloadUrl] = useState(null);
   const [error, setError] = useState('');
   const [currentStep, setCurrentStep] = useState(0);
+  const [showPassword, setShowPassword] = useState(false);
   const [showCookieHelp, setShowCookieHelp] = useState(false);
   const eventsEndRef = useRef(null);
   const esRef = useRef(null);
@@ -59,6 +62,8 @@ export default function App() {
       const { data } = await axios.post(`${API}/api/localize`, {
         articleUrl: form.articleUrl,
         portalUrl: form.portalUrl,
+        login: form.login,
+        password: form.password,
         sessionCookies: form.sessionCookies,
         languages: [form.language],
       });
@@ -167,10 +172,49 @@ export default function App() {
                 />
               </div>
 
-              {/* Session Cookies */}
+              {/* Login + Password */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div style={s.field}>
+                  <label style={s.label}>Логин (email)</label>
+                  <input
+                    style={s.input}
+                    type="text"
+                    placeholder="user@example.com"
+                    value={form.login}
+                    onChange={e => setForm(f => ({ ...f, login: e.target.value }))}
+                    disabled={running}
+                  />
+                </div>
+                <div style={s.field}>
+                  <label style={s.label}>Пароль</label>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      style={{ ...s.input, paddingRight: 40 }}
+                      type={showPassword ? 'text' : 'password'}
+                      placeholder="••••••••"
+                      value={form.password}
+                      onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                      disabled={running}
+                    />
+                    <button
+                      type="button"
+                      style={s.eyeBtn}
+                      onClick={() => setShowPassword(v => !v)}
+                      tabIndex={-1}
+                    >
+                      {showPassword ? '🙈' : '👁️'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Session Cookies (optional) */}
               <div style={s.field}>
                 <div style={s.labelRow}>
-                  <label style={s.label}>Session Cookies портала</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <label style={s.label}>Session Cookies</label>
+                    <span style={s.optionalBadge}>необязательно</span>
+                  </div>
                   <button
                     type="button"
                     style={s.helpToggle}
@@ -184,14 +228,14 @@ export default function App() {
                   <div style={s.cookieHelp}>
                     <div style={s.cookieHelpTitle}>Как получить cookies:</div>
                     <ol style={s.cookieHelpList}>
-                      <li>Зайдите на ваш портал в браузере и убедитесь что авторизованы</li>
-                      <li>Нажмите <strong>F12</strong> → вкладка <strong>Application</strong> (Chrome) или <strong>Storage</strong> (Firefox)</li>
-                      <li>В левом меню нажмите <strong>Cookies</strong> → выберите домен вашего портала</li>
-                      <li>Скопируйте значения cookies: <code style={s.code}>PHPSESSID</code>, <code style={s.code}>BX_USER_ID</code>, <code style={s.code}>BITRIX_SM_LOGIN</code></li>
-                      <li>Вставьте в поле ниже в формате: <code style={s.code}>PHPSESSID=value; BX_USER_ID=value</code></li>
+                      <li>Зайдите на ваш портал в браузере и авторизуйтесь</li>
+                      <li>Нажмите <strong>F12</strong> → <strong>Application</strong> (Chrome) или <strong>Storage</strong> (Firefox)</li>
+                      <li><strong>Cookies</strong> → выберите домен портала</li>
+                      <li>Скопируйте <code style={s.code}>PHPSESSID</code>, <code style={s.code}>BX_USER_ID</code>, <code style={s.code}>BITRIX_SM_LOGIN</code></li>
+                      <li>Вставьте в формате: <code style={s.code}>PHPSESSID=abc; BX_USER_ID=123</code></li>
                     </ol>
                     <div style={s.cookieHelpNote}>
-                      Cookies действуют до закрытия сессии. Если портал вышел из системы — получите новые cookies.
+                      Рекомендуется для надёжной авторизации. Если не указаны — используется логин/пароль.
                     </div>
                   </div>
                 )}
@@ -201,13 +245,12 @@ export default function App() {
                   placeholder={COOKIE_PLACEHOLDER}
                   value={form.sessionCookies}
                   onChange={e => setForm(f => ({ ...f, sessionCookies: e.target.value }))}
-                  required
                   disabled={running}
-                  rows={3}
+                  rows={2}
                   spellCheck={false}
                 />
                 <div style={s.cookieHint}>
-                  Формат: <code style={s.code}>name=value; name2=value2</code>
+                  Рекомендуется для надёжной авторизации · Формат: <code style={s.code}>name=value; name2=value2</code>
                 </div>
               </div>
 
@@ -423,6 +466,15 @@ const s = {
     lineHeight: 1.6,
   },
   cookieHint: { fontSize: 11, color: '#475569', marginTop: 5 },
+  optionalBadge: {
+    fontSize: 10, fontWeight: 600, padding: '2px 7px',
+    background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.3)',
+    borderRadius: 10, color: '#818cf8', letterSpacing: '0.3px',
+  },
+  eyeBtn: {
+    position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+    background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, padding: '2px',
+  },
   code: {
     background: 'rgba(255,255,255,0.08)', padding: '1px 5px',
     borderRadius: 4, fontFamily: 'monospace', fontSize: '0.9em',
