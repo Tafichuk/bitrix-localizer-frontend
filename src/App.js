@@ -34,7 +34,7 @@ export default function App() {
     portalUrl: '',
     login: '',
     password: '',
-    languages: ['en', 'de'],
+    language: 'en',
   });
   const [running, setRunning] = useState(false);
   const [events, setEvents] = useState([]);
@@ -52,21 +52,8 @@ export default function App() {
     }
   }, [events]);
 
-  const toggleLang = (code) => {
-    setForm(f => ({
-      ...f,
-      languages: f.languages.includes(code)
-        ? f.languages.filter(l => l !== code)
-        : [...f.languages, code],
-    }));
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (form.languages.length === 0) {
-      setError('Выберите хотя бы один язык');
-      return;
-    }
 
     setRunning(true);
     setEvents([]);
@@ -76,7 +63,7 @@ export default function App() {
     setCurrentStep(1);
 
     try {
-      const { data } = await axios.post(`${API}/api/localize`, form);
+      const { data } = await axios.post(`${API}/api/localize`, { ...form, languages: [form.language] });
       const { jobId } = data;
 
       const es = new EventSource(`${API}/api/stream/${jobId}`);
@@ -223,16 +210,16 @@ export default function App() {
 
               {/* Language Selection */}
               <div style={s.field}>
-                <label style={s.label}>Языки перевода</label>
+                <label style={s.label}>Язык перевода</label>
                 <div style={s.langGrid}>
                   {LANGUAGES.map(lang => {
-                    const selected = form.languages.includes(lang.code);
+                    const selected = form.language === lang.code;
                     return (
                       <button
                         key={lang.code}
                         type="button"
                         style={{ ...s.langBtn, ...(selected ? s.langBtnSelected : {}) }}
-                        onClick={() => !running && toggleLang(lang.code)}
+                        onClick={() => !running && setForm(f => ({ ...f, language: lang.code }))}
                         disabled={running}
                       >
                         <span style={{ fontSize: 18 }}>{lang.flag}</span>
@@ -242,14 +229,11 @@ export default function App() {
                     );
                   })}
                 </div>
-                {form.languages.length === 0 && (
-                  <div style={s.langWarning}>Выберите хотя бы один язык</div>
-                )}
               </div>
 
               {/* Submit */}
               {!running ? (
-                <button type="submit" style={s.submitBtn} disabled={form.languages.length === 0}>
+                <button type="submit" style={s.submitBtn}>
                   ✨ Запустить локализацию
                 </button>
               ) : (
@@ -350,7 +334,7 @@ export default function App() {
                 <div style={s.downloadIcon}>🎉</div>
                 <div style={s.downloadTitle}>Локализация завершена!</div>
                 <div style={s.downloadSub}>
-                  Готовые HTML файлы для {form.languages.length} языков
+                  {LANGUAGES.find(l => l.code === form.language)?.flag} Готовый HTML файл — {LANGUAGES.find(l => l.code === form.language)?.label}
                 </div>
                 <a
                   href={downloadUrl}
