@@ -16,20 +16,13 @@ const LANGUAGES = [
 const STEPS = {
   scraping: 1, scraped: 1,
   translating: 2, translated: 2,
-  analyzing: 3, analyzing_img: 3, analyzed: 3,
-  screenshots: 4, screenshot: 4, screenshots_done: 4,
-  generating: 5, done: 5,
+  localizing_img: 3, localized_img: 3,
+  generating: 4, done: 4,
 };
-
-const COOKIE_PLACEHOLDER = `PHPSESSID=abc123xyz; BX_USER_ID=456; BITRIX_SM_LOGIN=user@example.com`;
 
 export default function App() {
   const [form, setForm] = useState({
     articleUrl: '',
-    portalUrl: '',
-    login: '',
-    password: '',
-    sessionCookies: '',
     language: 'en',
   });
   const [running, setRunning] = useState(false);
@@ -38,8 +31,6 @@ export default function App() {
   const [downloadUrl, setDownloadUrl] = useState(null);
   const [error, setError] = useState('');
   const [currentStep, setCurrentStep] = useState(0);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showCookieHelp, setShowCookieHelp] = useState(false);
   const eventsEndRef = useRef(null);
   const esRef = useRef(null);
 
@@ -61,10 +52,6 @@ export default function App() {
     try {
       const { data } = await axios.post(`${API}/api/localize`, {
         articleUrl: form.articleUrl,
-        portalUrl: form.portalUrl,
-        login: form.login,
-        password: form.password,
-        sessionCookies: form.sessionCookies,
         languages: [form.language],
       });
       const { jobId } = data;
@@ -83,7 +70,7 @@ export default function App() {
         const ev = JSON.parse(e.data);
         setDownloadUrl(`${API}${ev.downloadUrl}`);
         setProgress(100);
-        setCurrentStep(5);
+        setCurrentStep(4);
         setRunning(false);
         es.close();
       });
@@ -117,9 +104,8 @@ export default function App() {
   const stepLabels = [
     { n: 1, icon: '🔍', label: 'Парсинг статьи' },
     { n: 2, icon: '🌐', label: 'Перевод текста' },
-    { n: 3, icon: '🤖', label: 'Анализ скриншотов' },
-    { n: 4, icon: '📸', label: 'Снимки портала' },
-    { n: 5, icon: '📦', label: 'Генерация файлов' },
+    { n: 3, icon: '🖼️', label: 'Локализация скринов' },
+    { n: 4, icon: '📦', label: 'Генерация файлов' },
   ];
 
   return (
@@ -133,7 +119,7 @@ export default function App() {
               <div style={s.logoSub}>Автоматическая локализация статей helpdesk</div>
             </div>
           </div>
-          <div style={s.badge}>Claude AI · Playwright</div>
+          <div style={s.badge}>Claude Vision · Sharp</div>
         </div>
       </header>
 
@@ -156,102 +142,6 @@ export default function App() {
                   required
                   disabled={running}
                 />
-              </div>
-
-              {/* Portal URL */}
-              <div style={s.field}>
-                <label style={s.label}>URL западного портала Bitrix24</label>
-                <input
-                  style={s.input}
-                  type="url"
-                  placeholder="https://yourcompany.bitrix24.com"
-                  value={form.portalUrl}
-                  onChange={e => setForm(f => ({ ...f, portalUrl: e.target.value }))}
-                  required
-                  disabled={running}
-                />
-              </div>
-
-              {/* Login + Password */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div style={s.field}>
-                  <label style={s.label}>Логин (email)</label>
-                  <input
-                    style={s.input}
-                    type="text"
-                    placeholder="user@example.com"
-                    value={form.login}
-                    onChange={e => setForm(f => ({ ...f, login: e.target.value }))}
-                    disabled={running}
-                  />
-                </div>
-                <div style={s.field}>
-                  <label style={s.label}>Пароль</label>
-                  <div style={{ position: 'relative' }}>
-                    <input
-                      style={{ ...s.input, paddingRight: 40 }}
-                      type={showPassword ? 'text' : 'password'}
-                      placeholder="••••••••"
-                      value={form.password}
-                      onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-                      disabled={running}
-                    />
-                    <button
-                      type="button"
-                      style={s.eyeBtn}
-                      onClick={() => setShowPassword(v => !v)}
-                      tabIndex={-1}
-                    >
-                      {showPassword ? '🙈' : '👁️'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Session Cookies (optional) */}
-              <div style={s.field}>
-                <div style={s.labelRow}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <label style={s.label}>Session Cookies</label>
-                    <span style={s.optionalBadge}>необязательно</span>
-                  </div>
-                  <button
-                    type="button"
-                    style={s.helpToggle}
-                    onClick={() => setShowCookieHelp(v => !v)}
-                  >
-                    {showCookieHelp ? 'Скрыть' : 'Как получить?'}
-                  </button>
-                </div>
-
-                {showCookieHelp && (
-                  <div style={s.cookieHelp}>
-                    <div style={s.cookieHelpTitle}>Как получить cookies:</div>
-                    <ol style={s.cookieHelpList}>
-                      <li>Зайдите на ваш портал в браузере и авторизуйтесь</li>
-                      <li>Нажмите <strong>F12</strong> → <strong>Application</strong> (Chrome) или <strong>Storage</strong> (Firefox)</li>
-                      <li><strong>Cookies</strong> → выберите домен портала</li>
-                      <li>Скопируйте <code style={s.code}>PHPSESSID</code>, <code style={s.code}>BX_USER_ID</code>, <code style={s.code}>BITRIX_SM_LOGIN</code></li>
-                      <li>Вставьте в формате: <code style={s.code}>PHPSESSID=abc; BX_USER_ID=123</code></li>
-                    </ol>
-                    <div style={s.cookieHelpNote}>
-                      Рекомендуется для надёжной авторизации. Если не указаны — используется логин/пароль.
-                    </div>
-                  </div>
-                )}
-
-                <textarea
-                  style={s.cookieInput}
-                  placeholder={COOKIE_PLACEHOLDER}
-                  value={form.sessionCookies}
-                  onChange={e => setForm(f => ({ ...f, sessionCookies: e.target.value }))}
-                  disabled={running}
-                  rows={2}
-                  spellCheck={false}
-                />
-                <div style={s.cookieHint}>
-                  Рекомендуется для надёжной авторизации · Формат: <code style={s.code}>name=value; name2=value2</code>
-                </div>
               </div>
 
               {/* Language Selection */}
@@ -296,9 +186,9 @@ export default function App() {
                 {[
                   ['🔍', 'Парсит HTML статьи с helpdesk.bitrix24.ru'],
                   ['🌐', 'Claude переводит текст на выбранный язык'],
-                  ['🤖', 'Claude Vision анализирует каждый скриншот'],
-                  ['📸', 'Playwright делает скриншоты страниц портала через session cookies'],
-                  ['📦', 'Создаёт ZIP с HTML файлами'],
+                  ['🖼️', 'Claude Vision находит русский текст на каждом скрине'],
+                  ['✏️', 'Sharp + Canvas перерисовывает текст переведённым'],
+                  ['📦', 'Создаёт ZIP с готовыми HTML и локализованными скринами'],
                 ].map(([icon, text], i) => (
                   <div key={i} style={s.howItem}>
                     <span style={s.howIcon}>{icon}</span>
@@ -427,7 +317,7 @@ const s = {
   },
   main: { maxWidth: 1200, margin: '0 auto', padding: '28px 24px' },
   grid: {
-    display: 'grid', gridTemplateColumns: '480px 1fr',
+    display: 'grid', gridTemplateColumns: '420px 1fr',
     gap: 20, alignItems: 'start',
   },
   leftCol: {},
@@ -438,47 +328,7 @@ const s = {
   },
   cardTitle: { fontSize: 15, fontWeight: 700, color: '#f8fafc', marginBottom: 20, letterSpacing: '-0.2px' },
   field: { marginBottom: 16 },
-  labelRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 },
-  label: { display: 'block', fontSize: 13, fontWeight: 600, color: '#94a3b8' },
-  helpToggle: {
-    background: 'none', border: 'none', color: '#6366f1',
-    fontSize: 12, cursor: 'pointer', fontWeight: 600, padding: 0,
-  },
-  cookieHelp: {
-    background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)',
-    borderRadius: 10, padding: '14px 16px', marginBottom: 10,
-  },
-  cookieHelpTitle: { fontSize: 13, fontWeight: 700, color: '#a5b4fc', marginBottom: 8 },
-  cookieHelpList: {
-    margin: '0 0 8px', paddingLeft: 18,
-    color: '#94a3b8', fontSize: 12, lineHeight: 1.8,
-  },
-  cookieHelpNote: {
-    fontSize: 12, color: '#64748b',
-    borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 8, marginTop: 4,
-  },
-  cookieInput: {
-    width: '100%', background: 'rgba(255,255,255,0.07)',
-    border: '1px solid rgba(255,255,255,0.12)', borderRadius: 9,
-    padding: '10px 14px', color: '#f1f5f9', fontSize: 12,
-    fontFamily: "'SFMono-Regular', Consolas, monospace",
-    outline: 'none', boxSizing: 'border-box', resize: 'vertical',
-    lineHeight: 1.6,
-  },
-  cookieHint: { fontSize: 11, color: '#475569', marginTop: 5 },
-  optionalBadge: {
-    fontSize: 10, fontWeight: 600, padding: '2px 7px',
-    background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.3)',
-    borderRadius: 10, color: '#818cf8', letterSpacing: '0.3px',
-  },
-  eyeBtn: {
-    position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
-    background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, padding: '2px',
-  },
-  code: {
-    background: 'rgba(255,255,255,0.08)', padding: '1px 5px',
-    borderRadius: 4, fontFamily: 'monospace', fontSize: '0.9em',
-  },
+  label: { display: 'block', fontSize: 13, fontWeight: 600, color: '#94a3b8', marginBottom: 7 },
   input: {
     width: '100%', background: 'rgba(255,255,255,0.07)',
     border: '1px solid rgba(255,255,255,0.12)', borderRadius: 9,
