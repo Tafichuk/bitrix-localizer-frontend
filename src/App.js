@@ -16,7 +16,7 @@ const LANGUAGES = [
 const STEPS = {
   scraping: 1, scraped: 1,
   translating: 2, translated: 2,
-  localizing_img: 3, localized_img: 3,
+  screenshots: 3, screenshot: 3, screenshots_done: 3,
   generating: 4, done: 4,
 };
 
@@ -104,7 +104,7 @@ export default function App() {
   const stepLabels = [
     { n: 1, icon: '🔍', label: 'Парсинг статьи' },
     { n: 2, icon: '🌐', label: 'Перевод текста' },
-    { n: 3, icon: '🖼️', label: 'Локализация скринов' },
+    { n: 3, icon: '📸', label: 'Скриншоты портала' },
     { n: 4, icon: '📦', label: 'Генерация файлов' },
   ];
 
@@ -119,7 +119,7 @@ export default function App() {
               <div style={s.logoSub}>Автоматическая локализация статей helpdesk</div>
             </div>
           </div>
-          <div style={s.badge}>Claude Vision · Sharp</div>
+          <div style={s.badge}>Claude Vision · Computer Use</div>
         </div>
       </header>
 
@@ -186,9 +186,8 @@ export default function App() {
                 {[
                   ['🔍', 'Парсит HTML статьи с helpdesk.bitrix24.ru'],
                   ['🌐', 'Claude переводит текст на выбранный язык'],
-                  ['🖼️', 'Claude Vision находит русский текст на каждом скрине'],
-                  ['✏️', 'Sharp + Canvas перерисовывает текст переведённым'],
-                  ['📦', 'Создаёт ZIP с готовыми HTML и локализованными скринами'],
+                  ['📸', 'Claude Computer Use воспроизводит каждый скрин на западном портале'],
+                  ['📦', 'Создаёт ZIP с переведёнными HTML и скринами портала'],
                 ].map(([icon, text], i) => (
                   <div key={i} style={s.howItem}>
                     <span style={s.howIcon}>{icon}</span>
