@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import axios from 'axios';
 
 const API = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3000';
@@ -23,7 +23,9 @@ const STEPS = {
 export default function App() {
   const [form, setForm] = useState({
     articleUrl: '',
-    language: 'en',
+    portalUrl: '',
+    cookies: '',
+    languages: [],
   });
   const [running, setRunning] = useState(false);
   const [events, setEvents] = useState([]);
@@ -32,7 +34,8 @@ export default function App() {
   const [error, setError] = useState('');
   const [currentStep, setCurrentStep] = useState(0);
   const eventsEndRef = useRef(null);
-  const esRef = useRef(null);
+  const pollRef = useRef(null);
+  const jobIdRef = useRef(null);
 
   useEffect(() => {
     if (eventsEndRef.current) {
@@ -40,55 +43,96 @@ export default function App() {
     }
   }, [events]);
 
+  const toggleLang = (code) => {
+    if (running) return;
+    setForm(f => ({
+      ...f,
+      languages: f.languages.includes(code)
+        ? f.languages.filter(l => l !== code)
+        : [...f.languages, code],
+    }));
+  };
+
+  const handleQuickTest = () => {
+    setForm({
+      articleUrl: 'https://helpdesk.bitrix24.ru/open/12395284/',
+      portalUrl: 'https://testportal.bitrix24.com/',
+      cookies: '',
+      languages: ['fr'],
+    });
+  };
+
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }, []);
+
+  const startPolling = useCallback((jobId) => {
+    jobIdRef.current = jobId;
+
+    const poll = async () => {
+      try {
+        const { data } = await axios.get(`${API}/api/status/${jobId}`);
+
+        if (data.progress) setProgress(Math.round(data.progress));
+        if (data.step && STEPS[data.step]) setCurrentStep(STEPS[data.step]);
+        if (data.events) {
+          setEvents(data.events.filter(ev => ev && ev.message));
+        }
+
+        if (data.status === 'done' && data.downloadUrl) {
+          setDownloadUrl(`${API}${data.downloadUrl}`);
+          setProgress(100);
+          setCurrentStep(4);
+          setRunning(false);
+          stopPolling();
+        } else if (data.status === 'error') {
+          setError(data.error || 'Неизвестная ошибка');
+          setRunning(false);
+          stopPolling();
+        }
+      } catch (err) {
+        // ignore transient network errors during polling
+      }
+    };
+
+    poll(); // first call immediately
+    pollRef.current = setInterval(poll, 5000);
+  }, [stopPolling]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!form.languages.length) {
+      setError('Выберите хотя бы один язык');
+      return;
+    }
     setRunning(true);
     setEvents([]);
     setProgress(0);
     setDownloadUrl(null);
     setError('');
     setCurrentStep(1);
+    stopPolling();
+
+    let parsedCookies = null;
+    if (form.cookies.trim()) {
+      try {
+        parsedCookies = JSON.parse(form.cookies.trim());
+      } catch (_) {
+        parsedCookies = form.cookies.trim();
+      }
+    }
 
     try {
       const { data } = await axios.post(`${API}/api/localize`, {
         articleUrl: form.articleUrl,
-        languages: [form.language],
+        portalUrl: form.portalUrl || undefined,
+        cookies: parsedCookies || undefined,
+        languages: form.languages,
       });
-      const { jobId } = data;
-
-      const es = new EventSource(`${API}/api/stream/${jobId}`);
-      esRef.current = es;
-
-      es.addEventListener('progress', (e) => {
-        const ev = JSON.parse(e.data);
-        setProgress(Math.round(ev.progress || 0));
-        if (STEPS[ev.step]) setCurrentStep(STEPS[ev.step]);
-        setEvents(prev => [...prev, { type: 'progress', ...ev }]);
-      });
-
-      es.addEventListener('complete', (e) => {
-        const ev = JSON.parse(e.data);
-        setDownloadUrl(`${API}${ev.downloadUrl}`);
-        setProgress(100);
-        setCurrentStep(4);
-        setRunning(false);
-        es.close();
-      });
-
-      es.addEventListener('error', (e) => {
-        let msg = 'Неизвестная ошибка';
-        try { msg = JSON.parse(e.data).message; } catch (_) {}
-        setError(msg);
-        setRunning(false);
-        es.close();
-      });
-
-      es.onerror = () => {
-        if (running) {
-          setError('Соединение с сервером прервано');
-          setRunning(false);
-        }
-      };
+      startPolling(data.jobId);
     } catch (err) {
       setError(err.response?.data?.error || err.message);
       setRunning(false);
@@ -96,7 +140,7 @@ export default function App() {
   };
 
   const handleStop = () => {
-    if (esRef.current) esRef.current.close();
+    stopPolling();
     setRunning(false);
     setError('Отменено пользователем');
   };
@@ -119,7 +163,7 @@ export default function App() {
               <div style={s.logoSub}>Автоматическая локализация статей helpdesk</div>
             </div>
           </div>
-          <div style={s.badge}>Claude Vision · Computer Use</div>
+          <div style={s.badge}>OpenAI GPT-4o · Computer Use</div>
         </div>
       </header>
 
@@ -129,6 +173,16 @@ export default function App() {
           <div style={s.leftCol}>
             <form onSubmit={handleSubmit} style={s.card}>
               <div style={s.cardTitle}>Параметры локализации</div>
+
+              {/* Quick Test Button */}
+              <button
+                type="button"
+                style={s.quickBtn}
+                onClick={handleQuickTest}
+                disabled={running}
+              >
+                ⚡ Быстрый тест (FR)
+              </button>
 
               {/* Article URL */}
               <div style={s.field}>
@@ -144,18 +198,44 @@ export default function App() {
                 />
               </div>
 
-              {/* Language Selection */}
+              {/* Portal URL */}
               <div style={s.field}>
-                <label style={s.label}>Язык перевода</label>
+                <label style={s.label}>URL западного портала</label>
+                <input
+                  style={s.input}
+                  type="url"
+                  placeholder="https://testportal.bitrix24.com/"
+                  value={form.portalUrl}
+                  onChange={e => setForm(f => ({ ...f, portalUrl: e.target.value }))}
+                  disabled={running}
+                />
+              </div>
+
+              {/* Session Cookies */}
+              <div style={s.field}>
+                <label style={s.label}>Session Cookies (необязательно)</label>
+                <textarea
+                  style={s.textarea}
+                  placeholder='JSON-массив cookies: [{"name":"...","value":"...","domain":"..."}]'
+                  value={form.cookies}
+                  onChange={e => setForm(f => ({ ...f, cookies: e.target.value }))}
+                  disabled={running}
+                  rows={3}
+                />
+              </div>
+
+              {/* Language Checkboxes */}
+              <div style={s.field}>
+                <label style={s.label}>Языки перевода</label>
                 <div style={s.langGrid}>
                   {LANGUAGES.map(lang => {
-                    const selected = form.language === lang.code;
+                    const selected = form.languages.includes(lang.code);
                     return (
                       <button
                         key={lang.code}
                         type="button"
                         style={{ ...s.langBtn, ...(selected ? s.langBtnSelected : {}) }}
-                        onClick={() => !running && setForm(f => ({ ...f, language: lang.code }))}
+                        onClick={() => toggleLang(lang.code)}
                         disabled={running}
                       >
                         <span style={{ fontSize: 18 }}>{lang.flag}</span>
@@ -178,24 +258,6 @@ export default function App() {
                 </button>
               )}
             </form>
-
-            {/* How it works */}
-            <div style={{ ...s.card, marginTop: 16 }}>
-              <div style={{ ...s.cardTitle, fontSize: 13 }}>Как это работает</div>
-              <div style={s.howList}>
-                {[
-                  ['🔍', 'Парсит HTML статьи с helpdesk.bitrix24.ru'],
-                  ['🌐', 'Claude переводит текст на выбранный язык'],
-                  ['📸', 'Claude Computer Use воспроизводит каждый скрин на западном портале'],
-                  ['📦', 'Создаёт ZIP с переведёнными HTML и скринами портала'],
-                ].map(([icon, text], i) => (
-                  <div key={i} style={s.howItem}>
-                    <span style={s.howIcon}>{icon}</span>
-                    <span style={s.howText}>{text}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
           </div>
 
           {/* RIGHT: Progress + Download */}
@@ -262,8 +324,8 @@ export default function App() {
                 <div style={s.downloadIcon}>🎉</div>
                 <div style={s.downloadTitle}>Локализация завершена!</div>
                 <div style={s.downloadSub}>
-                  {LANGUAGES.find(l => l.code === form.language)?.flag}{' '}
-                  {LANGUAGES.find(l => l.code === form.language)?.label}
+                  {form.languages.map(code => LANGUAGES.find(l => l.code === code)?.flag).join(' ')}
+                  {' '}{form.languages.map(code => LANGUAGES.find(l => l.code === code)?.label).join(', ')}
                 </div>
                 <a href={downloadUrl} download="localized-articles.zip" style={s.downloadBtn}>
                   ⬇️ Скачать ZIP архив
@@ -311,12 +373,12 @@ const s = {
   logoSub: { fontSize: 12, color: '#64748b', marginTop: 1 },
   badge: {
     fontSize: 12, padding: '4px 12px',
-    background: 'rgba(99,102,241,0.2)', border: '1px solid rgba(99,102,241,0.4)',
-    borderRadius: 20, color: '#a5b4fc', fontWeight: 600,
+    background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.35)',
+    borderRadius: 20, color: '#6ee7b7', fontWeight: 600,
   },
   main: { maxWidth: 1200, margin: '0 auto', padding: '28px 24px' },
   grid: {
-    display: 'grid', gridTemplateColumns: '420px 1fr',
+    display: 'grid', gridTemplateColumns: '440px 1fr',
     gap: 20, alignItems: 'start',
   },
   leftCol: {},
@@ -325,7 +387,13 @@ const s = {
     background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
     borderRadius: 16, padding: '24px',
   },
-  cardTitle: { fontSize: 15, fontWeight: 700, color: '#f8fafc', marginBottom: 20, letterSpacing: '-0.2px' },
+  cardTitle: { fontSize: 15, fontWeight: 700, color: '#f8fafc', marginBottom: 16, letterSpacing: '-0.2px' },
+  quickBtn: {
+    width: '100%', padding: '10px',
+    background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.35)',
+    borderRadius: 9, color: '#6ee7b7', fontSize: 13, fontWeight: 700,
+    cursor: 'pointer', marginBottom: 16,
+  },
   field: { marginBottom: 16 },
   label: { display: 'block', fontSize: 13, fontWeight: 600, color: '#94a3b8', marginBottom: 7 },
   input: {
@@ -333,6 +401,13 @@ const s = {
     border: '1px solid rgba(255,255,255,0.12)', borderRadius: 9,
     padding: '10px 14px', color: '#f1f5f9', fontSize: 14,
     outline: 'none', boxSizing: 'border-box',
+  },
+  textarea: {
+    width: '100%', background: 'rgba(255,255,255,0.07)',
+    border: '1px solid rgba(255,255,255,0.12)', borderRadius: 9,
+    padding: '10px 14px', color: '#f1f5f9', fontSize: 12,
+    outline: 'none', boxSizing: 'border-box', resize: 'vertical',
+    fontFamily: 'monospace',
   },
   langGrid: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 },
   langBtn: {
@@ -358,10 +433,6 @@ const s = {
     borderRadius: 10, color: '#f87171', fontSize: 15, fontWeight: 700,
     cursor: 'pointer', marginTop: 4,
   },
-  howList: { display: 'flex', flexDirection: 'column', gap: 10, marginTop: 4 },
-  howItem: { display: 'flex', alignItems: 'center', gap: 10 },
-  howIcon: { fontSize: 16, width: 24, textAlign: 'center', flexShrink: 0 },
-  howText: { fontSize: 13, color: '#64748b', lineHeight: 1.4 },
   stepsRow: { display: 'flex', gap: 8, marginBottom: 20, overflowX: 'auto', paddingBottom: 4 },
   stepItem: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, minWidth: 80, flex: 1 },
   stepCircle: {
